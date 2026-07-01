@@ -92,7 +92,18 @@ For backend extension hooks:
 
 ---
 
-## 6. Settings not saving / loading wrong values
+## 6. Plugin shadows a core extension
+
+If a plugin ships a file under a core extension point such as `extensions/python/monologue_start/_60_rename_chat.py`, debug both the plugin copy and the core file:
+
+- Compare `usr/plugins/<name>/extensions/...` with `/a0/extensions/...` and upstream.
+- Disabling the plugin only removes the plugin copy; the core extension may still contain the same bug.
+- For background state changes such as auto chat renaming, save the chat and notify the state monitor with `mark_dirty_all(...)` so the sidebar refreshes.
+- If a utility/model response is used as a UI label, normalize and validate it before persisting. Reject JSON/tool-call payloads, long multi-line dumps, and obvious UI text dumps rather than saving them as titles.
+
+---
+
+## 7. Settings not saving / loading wrong values
 
 Config resolution order (highest priority first):
 1. `project/.a0proj/agents/<profile>/plugins/<name>/config.json`
@@ -155,7 +166,26 @@ print('Done')
 
 ---
 
-## 8. Check Agent Zero logs
+## 8. Silent runtime failures / UI not refreshing
+
+If a plugin changes chat/project state on disk but the WebUI does not update:
+
+- Do not swallow exceptions with bare `except Exception: pass`; log them with `PrintStyle.error(...)` or equivalent.
+- If a frontend button calls an API and appears to do nothing, verify the API response itself contains the visible state the frontend expects. Avoid returning stale/null values after launching a background task; either await the task, return a pending state that the UI handles, or explicitly trigger/refetch state.
+- After saving chat state with `helpers.persist_chat.save_tmp_chat(context)`, notify the state monitor when the sidebar/UI must refresh:
+
+```python
+from helpers.state_monitor_integration import mark_dirty_all
+
+save_tmp_chat(context)
+mark_dirty_all(reason="plugins.<plugin_name>.<action>")
+```
+
+This is especially important for background extensions such as `monologue_start` auto-renamers, where the disk save can succeed while the sidebar remains stale.
+
+---
+
+## 9. Check Agent Zero logs
 
 ```bash
 # Find recent log files

@@ -7,12 +7,19 @@ import stat
 import sys
 import threading
 import time
+import types
 from pathlib import Path
 
 import pytest
 import yaml
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+plugins_pkg = types.ModuleType("plugins")
+plugins_pkg.__path__ = [str(PROJECT_ROOT / "plugins")]
+sys.modules["plugins"] = plugins_pkg
+
 from plugins._oauth.helpers import codex
 from plugins._oauth.helpers import routes
 from plugins._oauth.extensions.python._functions.models.get_api_key.end import (
@@ -68,6 +75,29 @@ def test_build_authorize_url_uses_existing_a0_origin_callback(monkeypatch):
     assert "redirect_uri=http%3A%2F%2Flocalhost%3A50001%2Fauth%2Fcallback" in auth_url
     assert "code_challenge=challenge" in auth_url
     assert "originator=codex_cli_rs" in auth_url
+
+
+def test_prepare_responses_body_wraps_string_input_for_codex_upstream():
+    body = codex.prepare_responses_body(
+        {
+            "model": "gpt-5.2",
+            "input": "Hello",
+            "max_output_tokens": 100,
+        },
+        force_stream=True,
+    )
+
+    assert body["input"] == [{"role": "user", "content": "Hello"}]
+    assert body["stream"] is True
+    assert "max_output_tokens" not in body
+
+
+
+def test_prepare_responses_body_normalizes_empty_string_input_to_list():
+    body = codex.prepare_responses_body({"input": ""}, force_stream=True)
+
+    assert body["input"] == []
+
 
 
 def test_chat_messages_to_response_body_extracts_instructions():

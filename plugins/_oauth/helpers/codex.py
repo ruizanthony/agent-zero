@@ -616,12 +616,31 @@ def fetch_models() -> list[str]:
 
 def prepare_responses_body(body: dict[str, Any], *, force_stream: bool) -> dict[str, Any]:
     normalized = dict(body)
+    normalized["input"] = normalize_responses_input(normalized.get("input"))
     normalized.setdefault("instructions", "")
     normalized.setdefault("store", False)
     if force_stream:
         normalized["stream"] = True
     normalized.pop("max_output_tokens", None)
     return normalized
+
+
+
+def normalize_responses_input(value: Any) -> list[Any]:
+    if isinstance(value, list):
+        return value
+    if value is None:
+        return []
+    if isinstance(value, dict):
+        return [value]
+    if isinstance(value, str):
+        if not value:
+            return []
+        return [{"role": "user", "content": value}]
+    text = str(value)
+    if not text:
+        return []
+    return [{"role": "user", "content": text}]
 
 
 def collect_completed_response(response: requests.Response) -> dict[str, Any]:

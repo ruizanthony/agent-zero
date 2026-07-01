@@ -115,6 +115,8 @@ const model = {
 
   // Computed: send button CSS class
   get sendButtonClass() {
+    if (messageQueueStore?.editSaving) return "send-queue edit saving";
+    if (messageQueueStore?.editingItem) return "send-queue queue-edit";
     const state = this._getSendState();
     if (state === "all") return "send-queue send-all";
     if (state === "queue") return "send-queue queue";
@@ -123,6 +125,8 @@ const model = {
 
   // Computed: send button title
   get sendButtonTitle() {
+    if (messageQueueStore?.editSaving) return "Saving queued message";
+    if (messageQueueStore?.editingItem) return "Save queued message";
     const state = this._getSendState();
     if (state === "all") return "Send all queued messages";
     if (state === "queue") return "Add to queue";

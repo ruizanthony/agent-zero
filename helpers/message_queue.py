@@ -29,18 +29,19 @@ def _get_next_seq(context: "AgentContext") -> int:
 def _sync_output(context: "AgentContext"):
     """Sync queue to output_data for frontend polling."""
     queue = get_queue(context)
-    # Truncate text for frontend display
     truncated = []
     for item in queue:
-        truncated.append({
-            "id": item["id"],
-            "seq": item.get("seq", 0),
-            "text": item["text"][:100] + "..." if len(item["text"]) > 100 else item["text"],
-            "attachments": [a.split("/")[-1] for a in item.get("attachments", [])],
-            "attachment_count": len(item.get("attachments", [])),
-        })
+        text = item.get("text", "")
+        truncated.append(
+            {
+                "id": item.get("id"),
+                "seq": item.get("seq", 0),
+                "text": text[:100] + "..." if len(text) > 100 else text,
+                "attachments": [os.path.basename(a) for a in item.get("attachments", [])],
+                "attachment_count": len(item.get("attachments", [])),
+            }
+        )
     context.set_output_data(QUEUE_KEY, truncated)
-
 
 def add(
     context: "AgentContext",

@@ -46,6 +46,10 @@
                 </template>
               </div>
               <div class="queue-item-actions">
+                <!-- chat_project_filter_queue_edit_patch -->
+                <button class="queue-action-btn edit" x-show="!item.pending" @click="$store.messageQueue.editItem(item)" title="Edit queued message">
+                  <span class="material-symbols-outlined">edit</span>
+                </button>
                 <button class="queue-action-btn send" @click="$store.messageQueue.sendItem(item.id)" title="Send now">
                   <span class="material-symbols-outlined">send</span>
                 </button>
@@ -158,9 +162,8 @@
     .queue-item-text {
       font-size: var(--font-size-small);
       color: var(--color-text);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
       flex: 1;
       min-width: 0;
     }

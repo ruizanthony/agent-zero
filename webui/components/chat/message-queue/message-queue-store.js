@@ -51,6 +51,105 @@ const model = {
     return [...this.items, ...this.pendingItems];
   },
 
+  // chat_project_filter_queue_edit_patch
+  editingItem: null,
+  editText: "",
+  editSaving: false,
+  _editingAttachments: [],
+  _finishEditPromise: null,
+
+  isEditing(item) {
+    return !!item && !!this.editingItem && this.editingItem.id === item.id;
+  },
+
+  editItem(item) {
+    if (!item || item.pending) return;
+    this.editingItem = { ...item };
+    this.editText = item.text || "";
+    this._editingAttachments = [...(item.attachments || [])];
+    const chatInput = globalThis.Alpine?.store?.("chatInput");
+    if (chatInput) {
+      chatInput.message = this.editText;
+      queueMicrotask(() => chatInput.adjustTextareaHeight?.());
+    }
+    queueMicrotask(() => {
+      const input = document.getElementById("chat-input");
+      if (input) {
+        input.focus();
+        input.selectionStart = input.selectionEnd = input.value.length;
+      }
+    });
+  },
+
+  cancelEdit() {
+    if (this.editSaving) return false;
+    this.editingItem = null;
+    this.editText = "";
+    this.editSaving = false;
+    this._editingAttachments = [];
+    return true;
+  },
+
+  async finishEdit() {
+    if (this._finishEditPromise) return this._finishEditPromise;
+    const item = this.editingItem;
+    if (!item || item.pending) return false;
+    const context = globalThis.getContext?.();
+    if (!context) return false;
+
+    const text = this.editText ?? "";
+    const attachments = [...(this._editingAttachments || [])];
+    const itemId = item.id;
+
+    const run = async () => {
+      this.editSaving = true;
+      try {
+        await api.callJsonApi("/message_queue_remove", { context, item_id: itemId });
+        const resp = await api.fetchApi("/message_queue_add", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ context, text, attachments, item_id: itemId }),
+        });
+        const result = await this.parseQueueJsonResponse(resp, "message_queue_edit");
+        if (!result?.ok) return false;
+        this.editingItem = null;
+        this.editText = "";
+        this._editingAttachments = [];
+        return true;
+      } catch (e) {
+        console.error("Failed to edit queued message:", e);
+        return false;
+      } finally {
+        this.editSaving = false;
+        this._finishEditPromise = null;
+      }
+    };
+
+    this._finishEditPromise = run();
+    return this._finishEditPromise;
+  },
+
+  async parseQueueJsonResponse(resp, label = "queue request") {
+    // chat_project_filter_queue_edit_patch_v2
+    if (!resp) throw new Error(`${label} did not return a response`);
+    const contentType = resp.headers?.get?.("content-type") || "";
+    const bodyText = await resp.text();
+    if (!resp.ok) {
+      const detail = bodyText ? bodyText.slice(0, 300) : resp.statusText;
+      throw new Error(`${label} failed (${resp.status}): ${detail}`);
+    }
+    if (!contentType.toLowerCase().includes("application/json")) {
+      const preview = bodyText ? bodyText.slice(0, 300) : "empty response";
+      throw new Error(`${label} returned non-JSON response: ${preview}`);
+    }
+    try {
+      return bodyText ? JSON.parse(bodyText) : {};
+    } catch (e) {
+      throw new Error(`${label} returned invalid JSON: ${e?.message || e}`);
+    }
+  },
+
   async addToQueue(text, attachments = []) {
     const context = globalThis.getContext?.();
     if (!context) return false;
@@ -59,7 +158,7 @@ const model = {
     const tempId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const pendingItem = {
       id: tempId,
-      text: text.substring(0, 200) || "(attachment only)",
+      text: text || "(attachment only)",
       attachments: attachments.map((a) => a.name || a.file?.name || "file"),
       pending: true,
     };
@@ -98,10 +197,8 @@ const model = {
             body: formData,
             signal: op.controller ? op.controller.signal : undefined,
           });
-          if (resp.ok) {
-            const result = await resp.json();
-            filenames = result.filenames || [];
-          }
+          const result = await this.parseQueueJsonResponse(resp, "upload");
+          filenames = result.filenames || [];
         }
 
         const resp = await api.fetchApi("/message_queue_add", {
@@ -119,11 +216,7 @@ const model = {
           signal: op.controller ? op.controller.signal : undefined,
         });
 
-        if (!resp || !resp.ok) {
-          return false;
-        }
-
-        const response = await resp.json();
+        const response = await this.parseQueueJsonResponse(resp, "message_queue_add");
 
         return response?.ok || false;
       } catch (e) {

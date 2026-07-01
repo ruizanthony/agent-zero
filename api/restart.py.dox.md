@@ -20,11 +20,14 @@
 - Update this file whenever request payloads, authentication or CSRF requirements, response shapes, route side effects, or WebSocket event contracts change.
 - `Restart` is an `ApiHandler`.
 - `Restart` defines `process(...)`.
-- Imported dependency areas include: `helpers`, `helpers.api`.
+- Imported dependency areas include: `helpers`, `helpers.api`, `threading`, `time`.
+- `Restart.process(...)` returns a JSON success dictionary immediately: `{"success": True, "message": "Restart scheduled."}`.
+- The actual reload is scheduled in a daemon thread after a short delay so the HTTP response can flush before the server exits or restarts.
 
 ## Key Concepts
 
-- Important called helpers/classes observed in the source: `process.reload`, `Response`.
+- Important called helpers/classes observed in the source: `process.reload`, `threading.Thread`, `time.sleep`.
+- Do not stop Uvicorn or exit the process synchronously inside the request handler, because that can cut the `/api/restart` response before the browser receives it.
 - Keep request/response, tool, or helper semantics documented here at the same time as source changes.
 
 ## Work Guidance

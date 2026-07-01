@@ -1,3 +1,7 @@
+import os
+import threading
+import time
+
 import initialize
 from helpers import dotenv, extension, runtime
 from helpers.api import csrf_protect, requires_auth
@@ -15,8 +19,8 @@ def run():
     PrintStyle().print("Preparing web server runtime...")
     server_runtime, host, port = prepare_web_runtime()
 
-    PrintStyle().print("Initializing Agent Zero components...")
-    init_a0()
+    PrintStyle().print("Scheduling Agent Zero background initialization...")
+    schedule_background_init_a0(include_chats=True)
 
     PrintStyle().print("Starting UI/API server...")
     start_web_server(server_runtime, host, port)
@@ -71,10 +75,54 @@ def create_flush_callback():
     return _run_flush
 
 
-@extension.extensible
-def init_a0():
+def initialize_required_a0_state() -> None:
     init_chats = initialize.initialize_chats()
     init_chats.result_sync()
+
+
+def _background_init_delay_seconds() -> float:
+    try:
+        return max(0.0, float(os.getenv("A0_BACKGROUND_INIT_DELAY_SECONDS", "1.0")))
+    except (TypeError, ValueError):
+        return 1.0
+
+
+_background_init_lock = threading.Lock()
+_background_init_started = False
+
+
+def schedule_background_init_a0(include_chats: bool = True) -> None:
+    global _background_init_started
+    with _background_init_lock:
+        if _background_init_started:
+            PrintStyle.hint("Background Agent Zero initialization already scheduled.")
+            return
+        _background_init_started = True
+
+    def _run_background_init() -> None:
+        delay = _background_init_delay_seconds()
+        if delay > 0:
+            time.sleep(delay)
+        try:
+            PrintStyle().print("Initializing Agent Zero background components...")
+            init_a0(include_chats=include_chats)
+            PrintStyle().print("Agent Zero background components initialized.")
+        except BaseException as e:
+            PrintStyle.error(
+                f"Background Agent Zero initialization failed: {type(e).__name__}: {e}"
+            )
+
+    threading.Thread(
+        target=_run_background_init,
+        daemon=True,
+        name="A0BackgroundInit",
+    ).start()
+
+
+@extension.extensible
+def init_a0(include_chats: bool = True):
+    if include_chats:
+        initialize_required_a0_state()
 
     initialize.initialize_mcp()
     initialize.initialize_job_loop()

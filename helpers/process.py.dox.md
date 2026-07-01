@@ -15,6 +15,7 @@
 - `get_server(server)`
 - `stop_server()`
 - `reload()`
+- `is_systemd_managed()`
 - `restart_process()`
 - `exit_process()`
 
@@ -23,11 +24,16 @@
 - Helper modules own reusable framework APIs and must preserve public callers unless all callers, tests, and docs are updated together.
 - Update this file whenever public functions, classes, persistence behavior, path/security assumptions, side effects, or cross-module contracts change.
 - Observed side-effect areas: subprocess/runtime control.
-- Imported dependency areas include: `helpers`, `helpers.print_style`, `os`, `sys`.
+- Imported dependency areas include: `helpers`, `helpers.print_style`, `os`, `sys`, `threading`.
+- `reload()` is idempotent for the current process: a lock and `_reloading` guard ignore duplicate restart requests after the first one starts.
+- In Dockerized or systemd-managed runtimes, `reload()` stops the server reference and exits the whole process with `os._exit(0)` so the external supervisor can restart it.
+- In non-Docker, non-systemd local development, `reload()` still re-execs the current Python process with `os.execv(...)`.
 
 ## Key Concepts
 
-- Important called helpers/classes observed in the source: `stop_server`, `runtime.is_dockerized`, `PrintStyle.standard`, `os.execv`, `sys.exit`, `_server.shutdown`, `exit_process`, `restart_process`.
+- Important called helpers/classes observed in the source: `stop_server`, `runtime.is_dockerized`, `is_systemd_managed`, `PrintStyle.standard`, `PrintStyle.hint`, `os.execv`, `os._exit`, `_server.shutdown`, `exit_process`, `restart_process`.
+- `is_systemd_managed()` treats `INVOCATION_ID`, `NOTIFY_SOCKET`, or `JOURNAL_STREAM` as evidence that the process is running under systemd.
+- Do not call `sys.exit()` from a reload worker thread; it only exits that thread and can leave `agent-zero.service` active/running without a listening UI process.
 - Keep request/response, tool, or helper semantics documented here at the same time as source changes.
 
 ## Work Guidance

@@ -9,6 +9,7 @@ from helpers.print_style import PrintStyle
 from helpers.state_monitor_integration import mark_dirty_all
 
 MAX_AUTO_CHAT_NAME_LENGTH = 40
+_MAX_HISTORY_CHARS_FOR_RENAME = 20000
 
 import json
 import re
@@ -47,9 +48,67 @@ def _collapse_repeated_title_prefix(value: str) -> str:
     return compact
 
 
+def _recent_history_for_rename(history_text: str) -> str:
+    if not isinstance(history_text, str):
+        return ""
+    history_text = history_text.strip()
+    if len(history_text) <= _MAX_HISTORY_CHARS_FOR_RENAME:
+        return history_text
+    return history_text[-_MAX_HISTORY_CHARS_FOR_RENAME:]
+
+
+def _content_text_for_rename(content: object) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, dict):
+        for key in ("user_message", "message", "content", "text", "preview"):
+            value = content.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        raw_content = content.get("raw_content")
+        if raw_content is not content:
+            return _content_text_for_rename(raw_content)
+    if isinstance(content, list):
+        parts = [_content_text_for_rename(item) for item in content]
+        return "\n".join(part for part in parts if part)
+    return ""
+
+
+def _history_text_for_rename(agent: object) -> str:
+    history = getattr(agent, "history", None)
+    if history is None:
+        return ""
+
+    try:
+        messages = list(history.all_messages())
+    except Exception:
+        try:
+            return _recent_history_for_rename(history.output_text())
+        except Exception:
+            return ""
+
+    lines: list[str] = []
+    for message in reversed(messages):
+        is_ai = bool(getattr(message, "ai", False))
+        text = _content_text_for_rename(getattr(message, "content", ""))
+        if not text:
+            continue
+        lowered = text.lower()
+        if "tool_result" in lowered or "tool_name" in lowered or "tool_args" in lowered:
+            continue
+        label = "ai" if is_ai else "user"
+        lines.append(f"{label}: {text}")
+        if len("\n".join(reversed(lines))) >= _MAX_HISTORY_CHARS_FOR_RENAME:
+            break
+        if len(lines) >= 30:
+            break
+    return _recent_history_for_rename("\n".join(reversed(lines)))
+
+
 def _fallback_auto_chat_name(history_text: str) -> str:
     """Best-effort local title when the utility model returns nothing usable."""
-    if not isinstance(history_text, str) or not history_text.strip():
+    history_text = _recent_history_for_rename(history_text)
+    if not history_text:
         return ""
 
     candidates: list[str] = []
@@ -168,11 +227,21 @@ class RenameChat(Extension):
         if not force and self.agent.context.get_data("chat_rename_manual_lock"):
             return
 
+        history_text = _history_text_for_rename(self.agent)
+        fallback_name = _fallback_auto_chat_name(history_text)
+        if force and fallback_name:
+            self.agent.context.name = fallback_name
+            try:
+                persist_chat.save_tmp_chat(self.agent.context)
+                mark_dirty_all(reason="extensions.rename_chat.auto.force_fallback")
+            except Exception as save_error:
+                PrintStyle.error(f"Auto chat rename save/refresh failed: {save_error}")
+            return fallback_name
+
         try:
             from plugins._model_config.helpers.model_config import get_utility_model_config
 
             util_cfg = get_utility_model_config(self.agent)
-            history_text = self.agent.history.output_text()
             ctx_length = min(int(util_cfg.get("ctx_length", 128000) * 0.7), 5000)
             history_text = tokens.trim_to_tokens(history_text, ctx_length, "end")
             system = self.agent.read_prompt("fw.rename_chat.sys.md")
@@ -197,7 +266,7 @@ class RenameChat(Extension):
         except Exception as e:
             PrintStyle.error(f"Auto chat rename failed: {e}")
             try:
-                history_text = self.agent.history.output_text()
+                history_text = _history_text_for_rename(self.agent)
                 new_name = _fallback_auto_chat_name(history_text)
                 if new_name:
                     self.agent.context.name = new_name

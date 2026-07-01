@@ -132,6 +132,51 @@ const model = {
     }
   },
 
+  async renameChat(id = null) {
+    const contextId = id || this.selected || getContext();
+    const context = this.contexts.find((ctx) => ctx.id === contextId) || this.selectedContext;
+    if (!contextId) return;
+
+    const currentName = context?.name || "";
+    const nextName = window.prompt("Chat name", currentName);
+    if (nextName === null) return;
+
+    try {
+      const response = await sendJsonData("/chat_rename", {
+        context_id: contextId,
+        mode: "manual",
+        name: nextName,
+      });
+      if (response?.ok) {
+        if (context) context.name = response.name;
+        if (this.selectedContext?.id === contextId) this.selectedContext.name = response.name;
+        justToast("Chat renamed", "success", 1000, "chat-rename");
+      }
+    } catch (e) {
+      toastFetchError("Error renaming chat", e);
+    }
+  },
+
+  async resetChatNameToAuto(id = null) {
+    const contextId = id || this.selected || getContext();
+    if (!contextId) return;
+
+    try {
+      const response = await sendJsonData("/chat_rename", {
+        context_id: contextId,
+        mode: "auto",
+      });
+      if (response?.ok) {
+        const context = this.contexts.find((ctx) => ctx.id === contextId);
+        if (context) context.name = response.name;
+        if (this.selectedContext?.id === contextId) this.selectedContext.name = response.name;
+        justToast("Automatic chat name enabled", "success", 1200, "chat-rename-auto");
+      }
+    } catch (e) {
+      toastFetchError("Error resetting chat name", e);
+    }
+  },
+
   // Delete a chat
   async killChat(id) {
     if (!id) {

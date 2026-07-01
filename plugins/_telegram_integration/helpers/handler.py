@@ -553,6 +553,21 @@ async def send_telegram_reply(
         PrintStyle.error(f"Telegram reply failed: {error}")
         return error
 
+
+async def _generate_telegram_voice(text: str) -> str | None:
+    """Generate an OGG/Opus Telegram voice note using local edge_tts_voice plugin.
+
+    Durable user plugin bridge. Default voice: fr-FR-HenriNeural.
+    Override with TELEGRAM_EDGE_TTS_VOICE if needed.
+    """
+    try:
+        from usr.plugins.edge_tts_voice.helpers.synthesizer import generate_telegram_voice
+        return await generate_telegram_voice(text)
+    except Exception as e:
+        PrintStyle.error(f"Telegram Edge TTS voice generation failed: {format_error(e)}")
+        return None
+
+
 # Helpers
 
 @asynccontextmanager

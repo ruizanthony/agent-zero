@@ -12,8 +12,9 @@ const model = {
   error: "",
   enabled: false,
   config: {
+    lang_code: "f",
     voice: "",
-    speed: 1.1,
+    speed: 1.25,
   },
   modelReady: false,
   modelLoading: false,
@@ -40,8 +41,9 @@ const model = {
       this.statusLoaded = true;
       this.enabled = !!status?.enabled;
       this.config = {
-        voice: status?.config?.voice || "",
-        speed: Number(status?.config?.speed || 1.1),
+        lang_code: status?.config?.lang_code || "f",
+        voice: status?.config?.voice || "ff_siwis",
+        speed: Number(status?.config?.speed || 1.25),
       };
       this.modelReady = !!status?.model?.ready;
       this.modelLoading = !!status?.model?.loading;

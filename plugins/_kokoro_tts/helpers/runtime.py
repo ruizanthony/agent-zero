@@ -24,8 +24,9 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 PLUGIN_NAME = "_kokoro_tts"
 DEFAULT_CONFIG = {
-    "voice": "am_puck,am_onyx",
-    "speed": 1.1,
+    "lang_code": "f",
+    "voice": "ff_siwis",
+    "speed": 1.25,
 }
 
 _pipeline = None
@@ -36,6 +37,10 @@ def normalize_config(config: dict[str, Any] | None) -> dict[str, Any]:
     normalized = dict(DEFAULT_CONFIG)
     if not isinstance(config, dict):
         return normalized
+
+    lang_code = str(config.get("lang_code", normalized["lang_code"]) or "f").strip().lower()
+    if lang_code:
+        normalized["lang_code"] = lang_code
 
     voice = str(config.get("voice", normalized["voice"]) or "").strip()
     if voice:
@@ -86,7 +91,7 @@ async def _preload():
             PrintStyle.standard("Loading Kokoro TTS model...")
             from kokoro import KPipeline
 
-            _pipeline = KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M")
+            _pipeline = KPipeline(lang_code=str(get_config().get("lang_code", "f") or "f"), repo_id="hexgrad/Kokoro-82M")
             NotificationManager.send_notification(
                 NotificationType.INFO,
                 NotificationPriority.NORMAL,

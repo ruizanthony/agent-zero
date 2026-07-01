@@ -12,6 +12,10 @@
 
     <div class="voice-plugin-meta">
       <div class="voice-plugin-meta-row">
+        <span>Language</span>
+        <code x-text="$store.kokoroTts?.config?.lang_code || 'f'"></code>
+      </div>
+      <div class="voice-plugin-meta-row">
         <span>Voice</span>
         <code x-text="$store.kokoroTts?.config?.voice || ''"></code>
       </div>
